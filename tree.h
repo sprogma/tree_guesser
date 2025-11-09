@@ -1,8 +1,13 @@
 #ifndef TREE_H
 #define TREE_H
 
-#include "inttypes.h"
+#ifdef _WIN32_WINNT
+    #undef _WIN32_WINNT
+#endif
+#define _WIN32_WINNT 0x0601
 #include "windows.h"
+
+#include "inttypes.h"
 
 struct quesion
 {
@@ -48,7 +53,7 @@ struct node_leaf
 
 struct tree_version
 {
-    struct node *root;
+    int64_t *root;
     int64_t size;
     int64_t parent;
     /* for searching LCA */
@@ -63,7 +68,7 @@ struct tree
     int64_t              versions_len;
     int64_t              versions_alloc;
     
-    SRWLOCK versions_lock;
+    SRWLOCK lock;
 
     struct node_allocator *allocator;
 };
@@ -104,12 +109,12 @@ void allocator_release_node(struct node_allocator *allocator, int64_t node_id, i
 int64_t allocator_create_node(struct node_allocator *allocator, enum node_type type);
 
 /* this is inner function, don't use it directly */
+/* result node will be locked with exclusive access */
 struct node *node_create();
 
 
 struct tree *tree_create();
 void tree_free(struct tree *tree);
-
 
 
 

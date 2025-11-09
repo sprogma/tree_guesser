@@ -19,6 +19,8 @@ struct node *node_create(enum node_type type)
             node->r = INVALID_NODE_ID;
             node->question = NULL;
 
+            AcquireSRWLockExclusive(&node->lock);
+
             return (struct node *)node;
         }
         case NODE_LEAF:
@@ -32,6 +34,8 @@ struct node *node_create(enum node_type type)
             node->lock = (SRWLOCK)SRWLOCK_INIT;
 
             node->guess = NULL;
+            
+            AcquireSRWLockExclusive(&node->lock);
             
             return (struct node *)node;
         }

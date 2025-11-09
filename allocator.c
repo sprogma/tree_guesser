@@ -52,12 +52,18 @@ void allocator_free(struct node_allocator *allocator)
 }
 
 
-void allocator_initializate_node(struct node_allocator *allocator, int64_t node_id, enum node_type type)
+static void allocator_initializate_node(struct node_allocator *allocator, int64_t node_id, enum node_type type)
 {
     /* !!! at begining of this function, allocator->lock must be 
            locked with exclusive access !!! */
    
-   allocator->nodes[node_id] = node_create(type);
+    allocator->nodes[node_id] = node_create(type);
+
+    int64_t access_token = allocator->access_token++;
+    allocator->nodes[node_id]->last_access = access_token;
+
+    /* free node's lock */
+    ReleaseSRWLockExclusive(&allocator->nodes[node_id]->lock);
 }
 
 
@@ -125,7 +131,7 @@ int64_t allocator_create_node(struct node_allocator *allocator, enum node_type t
 }
 
 
-void allocator_load_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
+static void allocator_load_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
     fprintf(stderr, "Not implemented: loading/unloading nodes\n");
     *(int *)NULL = 1;
@@ -133,7 +139,7 @@ void allocator_load_node(struct node_allocator *allocator, int64_t node_id, int3
 }
 
 
-void allocator_unload_node(struct node_allocator *allocator, int64_t node_id)
+static void allocator_unload_node(struct node_allocator *allocator, int64_t node_id)
 {
     fprintf(stderr, "Not implemented: loading/unloading nodes\n");
     *(int *)NULL = 1;
