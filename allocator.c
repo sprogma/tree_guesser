@@ -62,13 +62,14 @@ static void allocator_initializate_node(struct node_allocator *allocator, int64_
     int64_t access_token = allocator->access_token++;
     allocator->nodes[node_id]->last_access = access_token;
 
-    /* free node's lock */
-    ReleaseSRWLockExclusive(&allocator->nodes[node_id]->lock);
+    /* ! not free node lock - it continue to be locked with exclusive access */
 }
 
 
-int64_t allocator_create_node(struct node_allocator *allocator, enum node_type type)
+struct allocator_create_node_result allocator_create_node(struct node_allocator *allocator, enum node_type type)
 {
+    struct node *result_node;
+    
     AcquireSRWLockShared(&allocator->lock);
     /* allocate new node */
     for (int i = 0; i < allocator->nodes_alloc; ++i)
@@ -85,9 +86,12 @@ int64_t allocator_create_node(struct node_allocator *allocator, enum node_type t
             if (allocator->nodes[i] == NULL)
             {
                 allocator_initializate_node(allocator, i, type);
+
+                result_node = allocator->nodes[i];
                 
                 ReleaseSRWLockExclusive(&allocator->lock);
-                return i;
+                
+                return (struct allocator_create_node_result){i, result_node};
             }
             
             /* else - continue searching */
@@ -109,25 +113,31 @@ int64_t allocator_create_node(struct node_allocator *allocator, enum node_type t
     {
         /* can't insert new node */
         ReleaseSRWLockExclusive(&allocator->lock);
-        return INVALID_NODE_ID;
+        return (struct allocator_create_node_result){INVALID_NODE_ID, NULL};
     }
     
     /* set all new nodes as not allocated */
     memset(allocator->nodes + old_size, 0, sizeof(*allocator->nodes) * (allocator->nodes_alloc - old_size));
     
     /* now, state is exclusive, so use it to insert new node */
-    int64_t result_node = old_size;
+    int64_t result_node_id = old_size;
     
-    allocator_initializate_node(allocator, result_node, type);
+    allocator_initializate_node(allocator, result_node_id, type);
     
-    if (allocator->nodes[result_node] == NULL)
+    if (allocator->nodes[result_node_id] == NULL)
     {
-        result_node = INVALID_NODE_ID;
+        result_node_id = INVALID_NODE_ID;
+        result_node = NULL;
     }
+    else
+    {
+        result_node = allocator->nodes[result_node_id];
+    }
+    
     
     ReleaseSRWLockExclusive(&allocator->lock);
     
-    return result_node;
+    return (struct allocator_create_node_result){result_node_id, result_node};
 }
 
 
@@ -149,6 +159,8 @@ static void allocator_unload_node(struct node_allocator *allocator, int64_t node
 
 struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
+    assert(node_id != INVALID_NODE_ID);
+    
     AcquireSRWLockShared(&allocator->lock);
     
     /* if node was unloaded */
@@ -204,6 +216,8 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
 
 void allocator_release_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
+    assert(node_id != INVALID_NODE_ID);
+    
     AcquireSRWLockShared(&allocator->lock);
     
     /* release node */

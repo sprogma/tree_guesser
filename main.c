@@ -6,29 +6,13 @@
 int main()
 {
 
-    struct node_allocator *x = allocator_create();
-    
-    printf("x = %p\n", x);
+    struct tree *x = tree_create();
 
-    int64_t a = allocator_create_node(x, NODE_LEAF);
-    int64_t b = allocator_create_node(x, NODE_LEAF);
-
-    printf("a = %lld\n", a);
-    printf("b = %lld\n", b);
-
-    struct record guess = {NULL};
-
-    struct node_leaf *res;
+    /* insert node to tree */
+    struct tree_split_node_result res = tree_split_node(x, 0, -1, 1, NULL);
+    printf("created: %lld %lld\n", res.version_id, res.new_node_id);
     
-    res = (struct node_leaf *)allocator_acquire_node(x, a, 0);
-    printf("a->guess was %p\n", res->guess);
-    allocator_release_node(x, a, 0);
+    tree_free(x);
     
-    res = (struct node_leaf *)allocator_acquire_node(x, a, 1);
-    res->guess = &guess;
-    printf("a->guess now %p\n", res->guess);
-    allocator_release_node(x, a, 1);
-    
-    allocator_free(x);
     return 0;
 }
