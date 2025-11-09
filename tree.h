@@ -35,7 +35,7 @@ struct node_variant
 {
     struct node;
     int64_t l, r;
-    struct question *quesion;
+    struct question *question;
 };
 
 
@@ -99,11 +99,12 @@ struct node_allocator
 
 struct node_allocator *allocator_create();
 void allocator_free(struct node_allocator *allocator);
-struct node *allocator_acquire_node_shared(struct node_allocator *allocator, int64_t node_id);
-struct node *allocator_release_node_shared(struct node_allocator *allocator, int64_t node_id);
-struct node *allocator_acquire_node_exclusive(struct node_allocator *allocator, int64_t node_id);
-struct node *allocator_release_node_exclusive(struct node_allocator *allocator, int64_t node_id);
+struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
+void allocator_release_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
+int64_t allocator_create_node(struct node_allocator *allocator, enum node_type type);
 
+/* this is inner function, don't use it directly */
+struct node *node_create();
 
 
 struct tree *tree_create();

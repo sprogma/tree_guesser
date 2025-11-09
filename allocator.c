@@ -1,3 +1,6 @@
+#include "stdlib.h"
+#include "assert.h"
+#include "stdio.h"
 #include "tree.h"
 
 struct node_allocator *allocator_create()
@@ -6,7 +9,7 @@ struct node_allocator *allocator_create()
     
     allocator->nodes_alloc = 1024;
     allocator->nodes = calloc(1, sizeof(*allocator->nodes) * allocator->nodes_alloc);
-    allocator->lock = SRWLOCK_INIT;
+    allocator->lock = (SRWLOCK)SRWLOCK_INIT;
     allocator->loaded_nodes = 0;
     
     AcquireSRWLockExclusive(&allocator->lock);
@@ -31,7 +34,7 @@ void allocator_free(struct node_allocator *allocator)
     /* free allocator */
     for (int i = 0; i < allocator->nodes_len; ++i)
     {
-        if (res == UNLOADED_NODE)
+        if (allocator->nodes[i] == UNLOADED_NODE)
         {
             fprintf(stderr, "Not implemented: unloading nodes\n");
             *(int *)NULL = 1;
@@ -49,14 +52,16 @@ void allocator_free(struct node_allocator *allocator)
 }
 
 
-void allocator_initializate_node(struct node_allocator *allocator, int64_t node_id)
+void allocator_initializate_node(struct node_allocator *allocator, int64_t node_id, enum node_type type)
 {
     /* !!! at begining of this function, allocator->lock must be 
            locked with exclusive access !!! */
+   
+   allocator->nodes[node_id] = node_create(type);
 }
 
 
-int64_t allocator_create_node(struct node_allocator *allocator)
+int64_t allocator_create_node(struct node_allocator *allocator, enum node_type type)
 {
     AcquireSRWLockShared(&allocator->lock);
     /* allocate new node */
@@ -73,7 +78,7 @@ int64_t allocator_create_node(struct node_allocator *allocator)
                so check that it is still free */
             if (allocator->nodes[i] == NULL)
             {
-                allocator_initializate_node(allocator, i);
+                allocator_initializate_node(allocator, i, type);
                 
                 ReleaseSRWLockExclusive(&allocator->lock);
                 return i;
@@ -90,7 +95,7 @@ int64_t allocator_create_node(struct node_allocator *allocator)
     AcquireSRWLockExclusive(&allocator->lock);
     
     /* realloc */
-    int64_t new_id = allocator->nodes_alloc;
+    int64_t old_size = allocator->nodes_alloc;
     
     allocator->nodes_alloc = 2 * allocator->nodes_alloc + !allocator->nodes_alloc;
     void *new_ptr = realloc(allocator->nodes, sizeof(*allocator->nodes) * allocator->nodes_alloc);
@@ -101,14 +106,26 @@ int64_t allocator_create_node(struct node_allocator *allocator)
         return INVALID_NODE_ID;
     }
     
+    /* set all new nodes as not allocated */
+    memset(allocator->nodes + old_size, 0, sizeof(*allocator->nodes) * (allocator->nodes_alloc - old_size));
+    
     /* now, state is exclusive, so use it to insert new node */
-    allocator_initializate_node(allocator, new_id);
+    int64_t result_node = old_size;
+    
+    allocator_initializate_node(allocator, result_node, type);
+    
+    if (allocator->nodes[result_node] == NULL)
+    {
+        result_node = INVALID_NODE_ID;
+    }
     
     ReleaseSRWLockExclusive(&allocator->lock);
+    
+    return result_node;
 }
 
 
-void allocator_load_node(struct node_allocator *allocator, int64_t node_id)
+void allocator_load_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
     fprintf(stderr, "Not implemented: loading/unloading nodes\n");
     *(int *)NULL = 1;
@@ -129,7 +146,7 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
     AcquireSRWLockShared(&allocator->lock);
     
     /* if node was unloaded */
-    struct node *res = &allocator->nodes[node_id];
+    struct node *res = allocator->nodes[node_id];
     if (res == NULL)
     {
         /* not allocated node */
@@ -150,7 +167,7 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
         
         /* check - is node loaded or freed? 
            (if node was freed before loading) */
-        res = &allocator->nodes[node_id];
+        res = allocator->nodes[node_id];
         assert(res != UNLOADED_NODE);
         if (res == NULL)
         {
@@ -184,7 +201,7 @@ void allocator_release_node(struct node_allocator *allocator, int64_t node_id, i
     AcquireSRWLockShared(&allocator->lock);
     
     /* release node */
-    struct node *res = &allocator->nodes[node_id];
+    struct node *res = allocator->nodes[node_id];
     assert(res != NULL);
     assert(res != UNLOADED_NODE);
     
@@ -198,6 +215,4 @@ void allocator_release_node(struct node_allocator *allocator, int64_t node_id, i
     }
         
     ReleaseSRWLockShared(&allocator->lock);
-    
-    return res;
 }
