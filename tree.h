@@ -107,7 +107,9 @@ struct node_allocator
 struct node_allocator *allocator_create();
 void allocator_free(struct node_allocator *allocator);
 struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
-void allocator_release_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
+void allocator_release_node(struct node_allocator *allocator, struct node *node, int32_t exclusive);
+/* use tree_release_version if possible, becouse it is faster */
+void allocator_release_node_by_id(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
 
 /* this is inner function, don't use it directly */
 /* result node will be locked with exclusive access */
@@ -122,11 +124,18 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
 struct node *node_create();
 
 /* this is inner function, don't use it directly */
-void node_copy(struct node *dest_bs, struct node *node_bs);
+void node_make_copy(struct node *dest_bs, struct node *node_bs);
 
 
 struct tree *tree_create();
 void tree_free(struct tree *tree);
+
+struct tree_version *tree_acquire_version(struct tree *tree, int64_t version_id, int32_t exclusive);
+void tree_release_version(struct tree *tree, struct tree_version *version, int32_t exclusive);
+/* use tree_release_version if possible, becouse it is faster */
+void tree_release_version_by_id(struct tree *tree, int64_t version_id, int32_t exclusive);
+
+struct node_allocator *tree_get_allocator(struct tree *tree);
 
 struct tree_split_node_result {
     int64_t version_id;
@@ -138,7 +147,7 @@ struct tree_set_leaf_result {
     int64_t version_id;
     int64_t new_node_id;
 };
-struct tree_set_leaf_result tree_set_leaf(struct tree *tree, int64_t version, int64_t node_id, struct record *record);
+struct tree_set_leaf_result tree_set_leaf(struct tree *tree, int64_t version, int64_t node_id, int32_t set_as_left_child, struct record *record);
 
 
 #endif

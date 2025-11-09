@@ -214,25 +214,32 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
     return res;
 }
 
-void allocator_release_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
+void allocator_release_node_by_id(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
     assert(node_id != INVALID_NODE_ID);
     
     AcquireSRWLockShared(&allocator->lock);
     
+    struct node *node = allocator->nodes[node_id];
+    allocator_release_node(allocator, node, exclusive);
+        
+    ReleaseSRWLockShared(&allocator->lock);
+}
+
+void allocator_release_node(struct node_allocator *allocator, struct node *node, int32_t exclusive)
+{
+    (void)allocator;
+    
     /* release node */
-    struct node *res = allocator->nodes[node_id];
-    assert(res != NULL);
-    assert(res != UNLOADED_NODE);
+    assert(node != NULL);
+    assert(node != UNLOADED_NODE);
     
     if (exclusive)
     {
-        ReleaseSRWLockExclusive(&res->lock);
+        ReleaseSRWLockExclusive(&node->lock);
     }
     else
     {
-        ReleaseSRWLockShared(&res->lock);
+        ReleaseSRWLockShared(&node->lock);
     }
-        
-    ReleaseSRWLockShared(&allocator->lock);
 }

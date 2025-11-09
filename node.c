@@ -49,7 +49,7 @@ struct node *node_create(enum node_type type)
 
 
 /* copy only copiable data [for example not copy ptr_count or last_access value] */
-void node_copy(struct node *dest_bs, struct node *node_bs)
+void node_make_copy(struct node *dest_bs, struct node *node_bs)
 {
     dest_bs->parent = node_bs->parent;
 
