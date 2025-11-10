@@ -14,7 +14,6 @@ struct node *node_create(enum node_type type)
             node->type = type;
             node->ptr_count = 1;
             node->last_access = 0;
-            node->parent = INVALID_NODE_ID;
             node->lock = (SRWLOCK)SRWLOCK_INIT;
 
             node->l = INVALID_NODE_ID;
@@ -33,7 +32,6 @@ struct node *node_create(enum node_type type)
             node->type = type;
             node->ptr_count = 1;
             node->last_access = 0;
-            node->parent = INVALID_NODE_ID;
             node->lock = (SRWLOCK)SRWLOCK_INIT;
 
             node->record = NULL;
@@ -51,8 +49,6 @@ struct node *node_create(enum node_type type)
 /* copy only copiable data [for example not copy ptr_count or last_access value] */
 void node_make_copy(struct node *dest_bs, struct node *node_bs)
 {
-    dest_bs->parent = node_bs->parent;
-
     assert(dest_bs->type == node_bs->type);
     
     switch (node_bs->type)

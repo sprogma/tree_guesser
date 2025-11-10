@@ -32,7 +32,6 @@ struct node
     enum node_type type;
     _Atomic int32_t ptr_count;
     _Atomic int64_t last_access;
-    int64_t parent;
     SRWLOCK lock;
 };
 
@@ -100,16 +99,32 @@ struct node_allocator
 };
 
 
+/* ! iterators aren't thread safe structures */
+struct tree_iterator
+{
+    struct tree *tree;
+    int64_t version_id;
+    int64_t *path;
+    int64_t path_len;
+    int64_t path_alloc;
+};
 
 
 
 
 struct node_allocator *allocator_create();
 void allocator_free(struct node_allocator *allocator);
+
+
 struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
+
 void allocator_release_node(struct node_allocator *allocator, struct node *node, int32_t exclusive);
+
 /* use tree_release_version if possible, becouse it is faster */
 void allocator_release_node_by_id(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
+
+
+
 
 /* this is inner function, don't use it directly */
 /* result node will be locked with exclusive access */
@@ -119,35 +134,69 @@ struct allocator_create_node_result {
 };
 struct allocator_create_node_result allocator_create_node(struct node_allocator *allocator, enum node_type type);
 
+
 /* this is inner function, don't use it directly */
 /* result node will be locked with exclusive access */
 struct node *node_create();
+
 
 /* this is inner function, don't use it directly */
 void node_make_copy(struct node *dest_bs, struct node *node_bs);
 
 
+
 struct tree *tree_create();
 void tree_free(struct tree *tree);
 
+
+
+
 struct tree_version *tree_acquire_version(struct tree *tree, int64_t version_id, int32_t exclusive);
+
 void tree_release_version(struct tree *tree, struct tree_version *version, int32_t exclusive);
+
 /* use tree_release_version if possible, becouse it is faster */
 void tree_release_version_by_id(struct tree *tree, int64_t version_id, int32_t exclusive);
 
+
+
+/* ! iterators aren't thread safe structures */
+struct tree_iterator *tree_iterator_create(struct tree *tree, int64_t version_id);
+
+/* shift_from_current is shift from last node with direction at tree root:
+   shift = 0 means current node, shift = 1 - it's parent, and so on */
+int64_t tree_iterator_get_node(struct tree_iterator *iterator, int64_t shift_from_current);
+/* return depth of current element */
+int64_t tree_iterator_get_depth(struct tree_iterator *iterator);
+
+void tree_iterator_move_up(struct tree_iterator *iterator);
+void tree_iterator_move_down(struct tree_iterator *iterator, int32_t move_to_left);
+
+void tree_iterator_free(struct tree_iterator *iterator);
+
+
 struct node_allocator *tree_get_allocator(struct tree *tree);
+
+
+
 
 struct tree_split_node_result {
     int64_t version_id;
     int64_t new_node_id;
 };
-struct tree_split_node_result tree_split_node(struct tree *tree, int64_t version, int64_t node_id, int32_t node_is_now_left, struct question *quesion);
+struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_iterator *iterator, int32_t node_is_now_left, struct question *question);
+
+
+
 
 struct tree_set_leaf_result {
     int64_t version_id;
     int64_t new_node_id;
 };
-struct tree_set_leaf_result tree_set_leaf(struct tree *tree, int64_t version, int64_t node_id, int32_t set_as_left_child, struct record *record);
+struct tree_set_leaf_result tree_set_leaf(struct tree *tree, struct tree_iterator *iterator, int32_t set_as_left_child, struct record *record);
+
+
+
 
 
 #endif

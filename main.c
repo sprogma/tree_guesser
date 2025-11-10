@@ -21,13 +21,13 @@ void print_tree(struct node_allocator *a, int64_t node_id, int indent)
             allocator_release_node(a, node, 0);
             print_tree(a, l_id, indent + 1);
             PRINT_INDENT(indent);
-            printf("node VARIANT %lld [%p]: parent[%lld] type: %d ptr_count: %d\n", node_id, node, node->parent, node->type, node->ptr_count);
+            printf("node VARIANT %lld [%p]: type: %d ptr_count: %d\n", node_id, node, node->type, node->ptr_count);
             print_tree(a, r_id, indent + 1);
         }
         else
         {
             PRINT_INDENT(indent);
-            printf("node LEAF %lld [%p]: parent[%lld]: type: %d ptr_count: %d\n", node_id, node, node->parent, node->type, node->ptr_count);
+            printf("node LEAF %lld [%p]: type: %d ptr_count: %d\n", node_id, node, node->type, node->ptr_count);
             allocator_release_node(a, node, 0);
         }
     }
@@ -61,28 +61,47 @@ int main()
 
     /* insert node to tree */
     {
-        struct tree_set_leaf_result res = tree_set_leaf(x, v++, -1, 1, NULL);
+        struct tree_iterator *it = tree_iterator_create(x, v);
+        struct tree_set_leaf_result res = tree_set_leaf(x, it, 1, NULL);
         printf("1 created: %lld %lld\n", res.version_id, res.new_node_id);
+        v = res.version_id;
     }
     dump_tree(x, v);
     {
-        struct tree_split_node_result res = tree_split_node(x, v++, 0, 1, NULL);
-        printf("2 created: %lld %lld\n", res.version_id, res.new_node_id);
+        struct tree_iterator *it = tree_iterator_create(x, v);
+        struct tree_split_node_result res = tree_split_node(x, it, 1, NULL);
+        printf("2 splittd: %lld %lld\n", res.version_id, res.new_node_id);
+        v = res.version_id;
     }
     dump_tree(x, v);
     {
-        struct tree_set_leaf_result res = tree_set_leaf(x, v++, 1, 0, NULL);
+        struct tree_iterator *it = tree_iterator_create(x, v);
+        struct tree_set_leaf_result res = tree_set_leaf(x, it, 0, NULL);
         printf("3 created: %lld %lld\n", res.version_id, res.new_node_id);
+        v = res.version_id;
     }
     dump_tree(x, v);
     {
-        struct tree_split_node_result res = tree_split_node(x, v++, 4, 1, NULL);
-        printf("4 created: %lld %lld\n", res.version_id, res.new_node_id);
+        struct tree_iterator *it = tree_iterator_create(x, v);
+        struct tree_split_node_result res = tree_split_node(x, it, 1, NULL);
+        printf("4 splittd: %lld %lld\n", res.version_id, res.new_node_id);
+        v = res.version_id;
     }
     dump_tree(x, v);
     {
-        struct tree_split_node_result res = tree_split_node(x, v++, 6, 0, NULL);
-        printf("5 created: %lld %lld\n", res.version_id, res.new_node_id);
+        struct tree_iterator *it = tree_iterator_create(x, v);
+        tree_iterator_move_down(it, 1);
+        struct tree_split_node_result res = tree_split_node(x, it, 0, NULL);
+        printf("5 splittd: %lld %lld\n", res.version_id, res.new_node_id);
+        v = res.version_id;
+    }
+    dump_tree(x, v);
+    {
+        struct tree_iterator *it = tree_iterator_create(x, v);
+        tree_iterator_move_down(it, 1);
+        struct tree_set_leaf_result res = tree_set_leaf(x, it, 1, NULL);
+        printf("6 created: %lld %lld\n", res.version_id, res.new_node_id);
+        v = res.version_id;
     }
 
     /* dump tree */
