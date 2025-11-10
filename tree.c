@@ -75,7 +75,7 @@ struct tree *tree_create()
     tree->lock = (SRWLOCK)SRWLOCK_INIT;
 
     /* create allocator */
-    tree->allocator = allocator_create();
+    tree->allocator = allocator_create("./akinator.db");
 
     /* initializate root version */
     struct tree_allocate_version_result result = tree_allocate_version(tree, 0);
@@ -86,6 +86,17 @@ struct tree *tree_create()
     ReleaseSRWLockExclusive(&result.version->lock);
     
     return tree;
+}
+
+void tree_sync_and_free(struct tree *tree)
+{
+    AcquireSRWLockExclusive(&tree->lock);
+    
+    /* free all nodes? */
+    allocator_sync_and_free(tree->allocator);
+    
+    /* free tree */
+    free(tree);
 }
 
 void tree_free(struct tree *tree)

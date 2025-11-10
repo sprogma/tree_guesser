@@ -106,8 +106,9 @@ int main()
 
     /* dump tree */
     dump_tree(x, v);
-    
-    tree_free(x);
+
+    tree_sync_and_free(x);
+    // tree_free(x);
     
     return 0;
 }

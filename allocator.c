@@ -1,9 +1,10 @@
+#define __USE_MINGW_ANSI_STDIO 1
 #include "stdlib.h"
 #include "assert.h"
 #include "stdio.h"
 #include "tree.h"
 
-struct node_allocator *allocator_create()
+struct node_allocator *allocator_create(const char *db_filename)
 {
     struct node_allocator *allocator = calloc(1, sizeof(*allocator));
     
@@ -11,6 +12,21 @@ struct node_allocator *allocator_create()
     allocator->nodes = calloc(1, sizeof(*allocator->nodes) * allocator->nodes_alloc);
     allocator->lock = (SRWLOCK)SRWLOCK_INIT;
     allocator->loaded_nodes = 0;
+    allocator->pagefile = INVALID_HANDLE_VALUE;
+
+    if (db_filename != NULL)
+    {
+        allocator->pagefile = CreateFile(
+            db_filename,
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            NULL,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            NULL
+        );
+        printf("Open file!\n");
+    }
     
     AcquireSRWLockExclusive(&allocator->lock);
     
@@ -23,19 +39,104 @@ struct node_allocator *allocator_create()
 }
 
 
-void allocator_free(struct node_allocator *allocator)
+
+static struct node *allocator_load_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
-    /* lock */
+    AcquireSRWLockShared(&allocator->lock);
+
+    if (allocator->nodes[node_id] == NULL)
+    {
+        return NULL;
+        ReleaseSRWLockShared(&allocator->lock);
+    }
+    if (allocator->nodes[node_id] != UNLOADED_NODE)
+    {
+        if (exclusive)
+        {
+            AcquireSRWLockExclusive(&allocator->nodes[node_id]->lock);
+        }
+        else
+        {
+            AcquireSRWLockShared(&allocator->nodes[node_id]->lock);
+        }
+        struct node *node = allocator->nodes[node_id];
+        ReleaseSRWLockShared(&allocator->lock);
+        return node;
+    }
+    ReleaseSRWLockShared(&allocator->lock);
+    
     AcquireSRWLockExclusive(&allocator->lock);
-    /* stop all other processes? */
+    
+    assert(allocator->pagefile != INVALID_HANDLE_VALUE);
+
+    /* need to load node from file */
+    // void *paged_memory = 
+    
+    fprintf(stderr, "Not implemented: loading/unloading nodes\n");
+    *(int *)NULL = 1;
     // TODO:
     
+    ReleaseSRWLockExclusive(&allocator->lock);
+}
+
+
+/* at this call, allocator must have shared access locked */
+static void allocator_sync_node(struct node_allocator *allocator, int64_t node_id)
+{
+    printf("Sync node %lld\n", node_id);
+
+    struct node *node = allocator->nodes[node_id];
+
+    if (node == NULL)
+    {
+        printf("It is free\n");
+        return;
+    }
+    else if (node == UNLOADED_NODE)
+    {
+        printf("It is already unloaded\n");
+        return;
+    }
+
+    /* now we need to store node to file */
+    assert(allocator->pagefile != INVALID_HANDLE_VALUE);
+
+    int64_t offset = node_id * MAX_NODE_SIZE;
+    int64_t node_size = node_get_size(node);
+
+    printf("Writing to file at %lld count %lld\n", offset, node_size);
+
     
-    /* free allocator */
+    
+    fprintf(stderr, "Not implemented: loading/unloading nodes\n");
+    *(int *)NULL = 1;
+    // TODO:
+}
+
+
+static void allocator_unload_node(struct node_allocator *allocator, int64_t node_id)
+{
+    AcquireSRWLockShared(&allocator->lock);
+    assert(allocator->pagefile != INVALID_HANDLE_VALUE);
+
+    allocator_sync_node(allocator, node_id);
+    fprintf(stderr, "Not implemented: loading/unloading nodes\n");
+    *(int *)NULL = 1;
+    // TODO:
+    
+    ReleaseSRWLockShared(&allocator->lock);
+}
+
+
+/* at this call, allocator must have exclusive access locked */
+static void allocator_free_memory(struct node_allocator *allocator)
+{
     for (int i = 0; i < allocator->nodes_len; ++i)
     {
         if (allocator->nodes[i] == UNLOADED_NODE)
         {
+            assert(allocator->pagefile != INVALID_HANDLE_VALUE);
+            
             fprintf(stderr, "Not implemented: unloading nodes\n");
             *(int *)NULL = 1;
             // TODO:
@@ -46,9 +147,34 @@ void allocator_free(struct node_allocator *allocator)
         }
     }
     free(allocator);
+}
+
+
+void allocator_sync_and_free(struct node_allocator *allocator)
+{
+    /* one global sync, to assert that all nodes was synced, (for example
+       there was no new allocations in parallel with this sync) */
+    AcquireSRWLockExclusive(&allocator->lock);
     
-    // no release, becouse alloactor was deleted.
-    // ReleaseSRWLockExclusive(&allocator->lock);
+    for (int i = 0; i < allocator->nodes_alloc; ++i)
+    {
+        allocator_sync_node(allocator, i);
+    }
+    
+    allocator_free_memory(allocator);
+}
+
+
+void allocator_free(struct node_allocator *allocator)
+{
+    /* lock */
+    AcquireSRWLockExclusive(&allocator->lock);
+    /* stop all other processes? */
+    // TODO:
+    
+    
+    /* free allocator */
+    allocator_free_memory(allocator);
 }
 
 
@@ -141,22 +267,6 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
 }
 
 
-static void allocator_load_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
-{
-    fprintf(stderr, "Not implemented: loading/unloading nodes\n");
-    *(int *)NULL = 1;
-    // TODO:
-}
-
-
-static void allocator_unload_node(struct node_allocator *allocator, int64_t node_id)
-{
-    fprintf(stderr, "Not implemented: loading/unloading nodes\n");
-    *(int *)NULL = 1;
-    // TODO:
-}
-
-
 struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
     assert(node_id != INVALID_NODE_ID);
@@ -178,14 +288,13 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
         
         /* load_node also will acquire node, becouse in another
            way, node can be unloaded before next lock. */
-        allocator_load_node(allocator, node_id, exclusive);
+        res = allocator_load_node(allocator, node_id, exclusive);
         
         AcquireSRWLockShared(&allocator->lock);
         
         
         /* check - is node loaded or freed? 
            (if node was freed before loading) */
-        res = allocator->nodes[node_id];
         assert(res != UNLOADED_NODE);
         if (res == NULL)
         {

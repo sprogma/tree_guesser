@@ -53,7 +53,7 @@ struct node_leaf
     struct record *record;    
 };
 
-
+#define MAX_NODE_SIZE (sizeof(struct node_leaf) > sizeof(struct node_variant) ? sizeof(struct node_leaf) : sizeof(struct node_variant))
 #define UNLOADED_NODE ((void *)(1))
 #define INVALID_NODE_ID (-1)
 
@@ -96,6 +96,8 @@ struct node_allocator
     
     int64_t loaded_nodes;
 
+    HANDLE pagefile;
+
     _Atomic int64_t access_token;
 
     SRWLOCK lock;
@@ -115,7 +117,8 @@ struct tree_iterator
 
 
 
-struct node_allocator *allocator_create();
+struct node_allocator *allocator_create(const char *db_filename);
+void allocator_sync_and_free(struct node_allocator *allocator);
 void allocator_free(struct node_allocator *allocator);
 
 
@@ -150,8 +153,12 @@ void node_make_copy(struct node *dest_bs, struct node *node_bs);
 /* check if node are equal */
 int32_t node_is_isomorphic(struct node *node_a, struct node *node_b);
 
+/* returns node size in bytes */
+int64_t node_get_size(struct node *node);
+
 
 struct tree *tree_create();
+void tree_sync_and_free(struct tree *tree);
 void tree_free(struct tree *tree);
 
 

@@ -104,3 +104,21 @@ int32_t node_is_isomorphic(struct node *node_a, struct node *node_b)
             return 0;
     }
 }
+
+
+int64_t node_get_size(struct node *node)
+{
+    switch (node->type)
+    {
+        case NODE_VARIANT:
+        {
+            return sizeof(struct node_variant);
+        }
+        case NODE_LEAF:
+        {
+            return sizeof(struct node_leaf);
+        }
+        default:
+            return 0;
+    }
+}
