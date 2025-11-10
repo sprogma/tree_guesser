@@ -75,3 +75,32 @@ void node_make_copy(struct node *dest_bs, struct node *node_bs)
             return;
     }
 }
+
+
+int32_t node_is_isomorphic(struct node *node_a, struct node *node_b)
+{
+    if (node_a->type != node_b->type)
+    {
+        return 0;
+    }
+    
+    switch (node_a->type)
+    {
+        case NODE_VARIANT:
+        {
+            struct node_variant *node_a_var = (struct node_variant *)node_a;
+            struct node_variant *node_b_var = (struct node_variant *)node_b;
+
+            return node_a_var->question == node_b_var->question;
+        }
+        case NODE_LEAF:
+        {
+            struct node_leaf *node_a_leaf = (struct node_leaf *)node_a;
+            struct node_leaf *node_b_leaf = (struct node_leaf *)node_b;
+            
+            return node_a_leaf->record == node_b_leaf->record;
+        }
+        default:
+            return 0;
+    }
+}

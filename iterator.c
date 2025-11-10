@@ -103,3 +103,42 @@ void tree_iterator_free(struct tree_iterator *iterator)
     free(iterator);
 }
 
+struct tree_iterator *tree_iterator_copy_rebase(struct tree_iterator *iterator, int64_t new_version_id)
+{
+    /* not implemented */
+    return NULL;
+    
+    struct tree_iterator *result = tree_iterator_create(iterator->tree, new_version_id);
+    
+    struct tree_version *version = tree_acquire_version(iterator->tree, new_version_id, 0);
+
+    /* if this is empty iterator - make that iterator empty too */
+    if (iterator->path_len == 0)
+    {
+        tree_iterator_move_up(result);
+        tree_release_version(iterator->tree, version, 0);
+        return result;
+    }
+    else
+    {
+        if (tree_iterator_get_depth(result) == 0)
+        {
+            tree_release_version(iterator->tree, version, 0);
+            tree_iterator_free(result);
+            return NULL;
+        }
+        else
+        {
+            /* try to copy iterator's path */
+            for (int i = 1; i < iterator->path_len; ++i)
+            {
+                // if (node_)
+                // {
+                //     
+                // }
+            }
+        }
+    }
+
+    tree_release_version(iterator->tree, version, 0);
+}

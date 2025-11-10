@@ -30,7 +30,10 @@ enum node_type
 struct node
 {
     enum node_type type;
+    
+    /* not used for now */
     _Atomic int32_t ptr_count;
+    
     _Atomic int64_t last_access;
     SRWLOCK lock;
 };
@@ -144,10 +147,12 @@ struct node *node_create();
 void node_make_copy(struct node *dest_bs, struct node *node_bs);
 
 
+/* check if node are equal */
+int32_t node_is_isomorphic(struct node *node_a, struct node *node_b);
+
 
 struct tree *tree_create();
 void tree_free(struct tree *tree);
-
 
 
 
