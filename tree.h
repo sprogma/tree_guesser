@@ -29,7 +29,7 @@ enum node_type
 
 struct node
 {
-    enum node_type type;
+    int32_t type; /* enum node_type */
     
     /* not used for now */
     _Atomic int32_t ptr_count;
@@ -53,7 +53,7 @@ struct node_leaf
     struct record *record;    
 };
 
-#define MAX_NODE_SIZE (sizeof(struct node_leaf) > sizeof(struct node_variant) ? sizeof(struct node_leaf) : sizeof(struct node_variant))
+#define MAX_NODE_SIZE ((int64_t)(sizeof(struct node_leaf) > sizeof(struct node_variant) ? sizeof(struct node_leaf) : sizeof(struct node_variant)))
 #define UNLOADED_NODE ((void *)(1))
 #define INVALID_NODE_ID (-1)
 
