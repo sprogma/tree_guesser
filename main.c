@@ -1,4 +1,5 @@
 #define __USE_MINGW_ANSI_STDIO 1
+#include "sys/time.h"
 #include "stdio.h"
 #include "tree.h"
 
@@ -52,7 +53,6 @@ void dump_tree(struct tree *t, int64_t version_id)
     tree_release_version(t, version, 0);
 }
 
-
 int main()
 {
 
@@ -96,6 +96,13 @@ int main()
         v = res.version_id;
     }
     dump_tree(x, v);
+    printf("UNLOADING-----------------------------------5 node\n");
+    {
+        struct node_allocator *a = tree_get_allocator(x);
+        allocator_try_unload_node(a, 5);
+    printf("UNLOADING END-----------------------------------5 node\n");
+    dump_tree(x, v);
+    }
     {
         struct tree_iterator *it = tree_iterator_create(x, v);
         tree_iterator_move_down(it, 1);
@@ -107,7 +114,16 @@ int main()
     /* dump tree */
     dump_tree(x, v);
 
+    printf("sync...\n");
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    double total_seconds1 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+    
     tree_sync_and_free(x);
+    
+    gettimeofday(&tv, NULL);
+    double total_seconds2 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+    printf("sync used %f seconds\n", total_seconds2 - total_seconds1);
     // tree_free(x);
     
     return 0;

@@ -129,7 +129,12 @@ void allocator_release_node(struct node_allocator *allocator, struct node *node,
 /* use tree_release_version if possible, becouse it is faster */
 void allocator_release_node_by_id(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
 
-
+#define NODE_WAS_MODITIFIED 0x179
+#define NODE_ALREADY_UNLOADED 0x998
+#define NODE_WAS_FREED 0x244
+#define NODE_IS_FREE 0x353
+int32_t allocator_try_unload_node(struct node_allocator *allocator, int64_t node_id);
+void allocator_unload_node_force(struct node_allocator *allocator, int64_t node_id);
 
 
 /* this is inner function, don't use it directly */
