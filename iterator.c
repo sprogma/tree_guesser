@@ -88,9 +88,14 @@ void tree_iterator_move_down(struct tree_iterator *iterator, int32_t move_to_lef
             next_node_id = variant->r;
         }
         
-        assert(next_node_id != INVALID_NODE_ID);
-        
-        iterator_add_node(iterator, next_node_id);
+        if (next_node_id == INVALID_NODE_ID)
+        {
+            iterator->path_len = 0;
+        }
+        else
+        {
+            iterator_add_node(iterator, next_node_id);
+        }
         
         allocator_release_node(allocator, node, 0);
     }

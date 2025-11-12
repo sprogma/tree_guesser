@@ -9,7 +9,7 @@
 
 #include "inttypes.h"
 
-struct quesion
+struct question
 {
     char *text;
 };
@@ -62,6 +62,7 @@ struct tree_version
     int64_t root;
     int64_t size;
     int64_t parent;
+    
     /* for searching LCA */
     int64_t far_parent;
     int64_t depth;
