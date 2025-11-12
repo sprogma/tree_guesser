@@ -3,61 +3,19 @@
 #include "stdio.h"
 #include "tree.h"
 #include "worker.h"
+#include "locale.h"
 #include "akinator_types.h"
-
-#define PRINT_INDENT(indent) for (int i = 0; i < 4 * (indent); ++i) { putchar(' '); }
-void print_tree(struct node_allocator *a, int64_t node_id, int indent)
-{
-    if (node_id == INVALID_NODE_ID)
-    {
-        PRINT_INDENT(indent);
-        printf("no node\n");
-    }
-    else
-    {
-        struct node *node = allocator_acquire_node(a, node_id, 0);
-        if (node->type == NODE_VARIANT)
-        {
-            int64_t l_id, r_id;
-            l_id = ((struct node_variant *)node)->l;
-            r_id = ((struct node_variant *)node)->r;
-            allocator_release_node(a, node, 0);
-            print_tree(a, l_id, indent + 1);
-            PRINT_INDENT(indent);
-            printf("node VARIANT %lld [%p]: type: %d ptr_count: %d data:%p\n", node_id, node, node->type, node->ptr_count, ((struct node_variant *)node)->question);
-            print_tree(a, r_id, indent + 1);
-        }
-        else
-        {
-            PRINT_INDENT(indent);
-            printf("node LEAF %lld [%p]: type: %d ptr_count: %d data:%p\n", node_id, node, node->type, node->ptr_count, ((struct node_leaf *)node)->record);
-            allocator_release_node(a, node, 0);
-        }
-    }
-}
-
-
-void dump_version(struct node_allocator *a, struct tree_version *v)
-{
-    printf("-------- version %p: parent: %lld [far: %lld] depth: %lld\n", v, v->parent, v->far_parent, v->depth);
-    print_tree(a, v->root, 0);
-}
-
-
-void dump_tree(struct tree *t, int64_t version_id)
-{
-    printf("----- tree %p: total %lld versions\n", t, t->versions_len);
-    printf("-------- tree of version %lld:\n", version_id);
-
-    struct tree_version *version = tree_acquire_version(t, version_id, 0);
-    struct node_allocator *a = tree_get_allocator(t);
-    dump_version(a, version);
-    tree_release_version(t, version, 0);
-}
 
 
 int main()
 {
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    // if (setlocale(LC_ALL, "") == NULL) {
+    //     perror("setlocale failed");
+    //     return 1;
+    // }
+    
     struct tree *x = tree_create();
     int64_t v = 0;
 
@@ -75,68 +33,47 @@ int main()
     {
         struct tree_iterator *it = tree_iterator_create(x, v);
         struct tree_set_leaf_result res = tree_set_leaf(x, it, 1, &r1);
-        printf("1 created: %lld %lld\n", res.version_id, res.new_node_id);
         v = res.version_id;
+        tree_iterator_free(it);
     }
-    dump_tree(x, v);
     {
         struct tree_iterator *it = tree_iterator_create(x, v);
         struct tree_split_node_result res = tree_split_node(x, it, 1, &q1);
-        printf("2 splittd: %lld %lld\n", res.version_id, res.new_node_id);
         v = res.version_id;
+        tree_iterator_free(it);
     }
-    dump_tree(x, v);
     {
         struct tree_iterator *it = tree_iterator_create(x, v);
         struct tree_set_leaf_result res = tree_set_leaf(x, it, 0, &r2);
-        printf("3 created: %lld %lld\n", res.version_id, res.new_node_id);
         v = res.version_id;
+        tree_iterator_free(it);
     }
-    dump_tree(x, v);
     {
         struct tree_iterator *it = tree_iterator_create(x, v);
         struct tree_split_node_result res = tree_split_node(x, it, 1, &q2);
-        printf("4 splittd: %lld %lld\n", res.version_id, res.new_node_id);
         v = res.version_id;
+        tree_iterator_free(it);
     }
-    dump_tree(x, v);
     {
         struct tree_iterator *it = tree_iterator_create(x, v);
-        tree_iterator_move_down(it, 1);
+        tree_iterator_try_move_down(it, 1);
         struct tree_split_node_result res = tree_split_node(x, it, 0, &q3);
-        printf("5 splittd: %lld %lld\n", res.version_id, res.new_node_id);
         v = res.version_id;
+        tree_iterator_free(it);
     }
-    dump_tree(x, v);
-    printf("UNLOADING-----------------------------------5 node\n");
     {
         struct node_allocator *a = tree_get_allocator(x);
         allocator_try_unload_node(a, 5);
-    printf("UNLOADING END-----------------------------------5 node\n");
-    dump_tree(x, v);
     }
     {
         struct tree_iterator *it = tree_iterator_create(x, v);
-        tree_iterator_move_down(it, 1);
+        tree_iterator_try_move_down(it, 1);
         struct tree_set_leaf_result res = tree_set_leaf(x, it, 1, &r3);
-        printf("6 created: %lld %lld\n", res.version_id, res.new_node_id);
         v = res.version_id;
+        tree_iterator_free(it);
     }
 
     /* dump tree */
-    dump_tree(x, v);
-
-    // printf("sync...\n");
-    // struct timeval tv;
-    // gettimeofday(&tv, NULL);
-    // double total_seconds1 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
-    // 
-    // tree_sync_and_free(x);
-    // 
-    // gettimeofday(&tv, NULL);
-    // double total_seconds2 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
-    // printf("sync used %f seconds\n", total_seconds2 - total_seconds1);
-    // // tree_free(x);x
     
     /* check workers */
     printf("Checking workers subsystem");
@@ -151,29 +88,62 @@ int main()
 
         struct akinator_user user = {.id = 5};
         
-        struct akinator_task_data task_data;
-
-        task_data.dont_solved = 0;
-        task_data.user = &user;
-        task_data.iterator = tree_iterator_create(x, v);
-        
-        struct worker_task_id task = worker_pool_start_task(p, &task_data);
-
-        while (p->free_id_len != p->tasks_alloc)
+        while (1)
         {
-            char *text = malloc(1000);
-            printf("ANSWER: ");
-            scanf("%s[^\n]\n", text);
-            if (p->free_id_len != p->tasks_alloc)
+            struct akinator_task_data task_data;
+
+            task_data.dont_solved = 0;
+            task_data.user = &user;
+            task_data.iterator = tree_iterator_create(x, x->versions_len - 1);
+            task_data.add_new_name = NULL;
+            
+            printf("Starting game...\n");
+            struct worker_task_id task = worker_pool_start_task(p, &task_data);
+    
+            while (p->free_id_len != p->tasks_alloc)
             {
-                worker_pool_receive_event(p, task, (void *)text);
+                char *text = malloc(1000);
+                printf("ANSWER: ");
+                {
+                    int c, id = 0;
+                    while ((c = getchar()) != '\n')
+                    {
+                        text[id++] = c;
+                    }
+                    text[id++] = 0;
+                }
+                if (p->free_id_len != p->tasks_alloc)
+                {
+                    worker_pool_receive_event(p, task, (void *)text);
+                }
             }
+
+            if (task_data.add_new_name)
+            {
+                free(task_data.add_new_name);
+            }
+
+            tree_iterator_free(task_data.iterator);
+    
+            printf("Game ended\n");
         }
 
-        printf("Game ended\n");
+        printf("You selected to quit the game\n");
 
         worker_pool_free(p);
     }
+
+    printf("saving...\n");
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    double total_seconds1 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+
+    tree_sync_and_free(x);
+
+    gettimeofday(&tv, NULL);
+    double total_seconds2 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+    printf("saving used %f seconds\n", total_seconds2 - total_seconds1);
     
     return 0;
 }
+

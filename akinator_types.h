@@ -14,6 +14,8 @@ struct akinator_task_data
     int64_t dont_solved;
     struct akinator_user *user;
     struct tree_iterator *iterator;
+    int32_t set_as_leaf;
+    char *add_new_name;
 };
 
 

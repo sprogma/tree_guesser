@@ -30,7 +30,7 @@ struct tree_iterator *tree_iterator_create(struct tree *tree, int64_t version_id
     iterator->path = calloc(1, sizeof(*iterator->path) * iterator->path_alloc);
 
     /* try to select root */
-    tree_iterator_move_down(iterator, 0);
+    tree_iterator_try_move_down(iterator, 0);
     
     return iterator;
 }
@@ -55,7 +55,7 @@ void tree_iterator_move_up(struct tree_iterator *iterator)
     iterator->path_len--;
 }
 
-void tree_iterator_move_down(struct tree_iterator *iterator, int32_t move_to_left)
+int32_t tree_iterator_try_move_down(struct tree_iterator *iterator, int32_t move_to_left)
 {
     if (iterator->path_len == 0)
     {
@@ -90,15 +90,14 @@ void tree_iterator_move_down(struct tree_iterator *iterator, int32_t move_to_lef
         
         if (next_node_id == INVALID_NODE_ID)
         {
-            iterator->path_len = 0;
+            return 1;
         }
-        else
-        {
-            iterator_add_node(iterator, next_node_id);
-        }
+        
+        iterator_add_node(iterator, next_node_id);
         
         allocator_release_node(allocator, node, 0);
     }
+    return 0;
 }
 
 void tree_iterator_free(struct tree_iterator *iterator)

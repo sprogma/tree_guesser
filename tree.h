@@ -188,7 +188,7 @@ int64_t tree_iterator_get_node(struct tree_iterator *iterator, int64_t shift_fro
 int64_t tree_iterator_get_depth(struct tree_iterator *iterator);
 
 void tree_iterator_move_up(struct tree_iterator *iterator);
-void tree_iterator_move_down(struct tree_iterator *iterator, int32_t move_to_left);
+int32_t tree_iterator_try_move_down(struct tree_iterator *iterator, int32_t move_to_left);
 
 void tree_iterator_free(struct tree_iterator *iterator);
 
