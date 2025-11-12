@@ -11,12 +11,8 @@ int main()
 {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
-    // if (setlocale(LC_ALL, "") == NULL) {
-    //     perror("setlocale failed");
-    //     return 1;
-    // }
     
-    struct tree *x = tree_create();
+    struct tree *tree = tree_create();
     int64_t v = 0;
 
     struct question 
@@ -31,44 +27,44 @@ int main()
 
     /* insert node to tree */
     {
-        struct tree_iterator *it = tree_iterator_create(x, v);
-        struct tree_set_leaf_result res = tree_set_leaf(x, it, 1, &r1);
+        struct tree_iterator *it = tree_iterator_create(tree, v);
+        struct tree_set_leaf_result res = tree_set_leaf(tree, it, 1, &r1);
         v = res.version_id;
         tree_iterator_free(it);
     }
     {
-        struct tree_iterator *it = tree_iterator_create(x, v);
-        struct tree_split_node_result res = tree_split_node(x, it, 1, &q1);
+        struct tree_iterator *it = tree_iterator_create(tree, v);
+        struct tree_split_node_result res = tree_split_node(tree, it, 1, &q1);
         v = res.version_id;
         tree_iterator_free(it);
     }
     {
-        struct tree_iterator *it = tree_iterator_create(x, v);
-        struct tree_set_leaf_result res = tree_set_leaf(x, it, 0, &r2);
+        struct tree_iterator *it = tree_iterator_create(tree, v);
+        struct tree_set_leaf_result res = tree_set_leaf(tree, it, 0, &r2);
         v = res.version_id;
         tree_iterator_free(it);
     }
     {
-        struct tree_iterator *it = tree_iterator_create(x, v);
-        struct tree_split_node_result res = tree_split_node(x, it, 1, &q2);
+        struct tree_iterator *it = tree_iterator_create(tree, v);
+        struct tree_split_node_result res = tree_split_node(tree, it, 1, &q2);
         v = res.version_id;
         tree_iterator_free(it);
     }
     {
-        struct tree_iterator *it = tree_iterator_create(x, v);
+        struct tree_iterator *it = tree_iterator_create(tree, v);
         tree_iterator_try_move_down(it, 1);
-        struct tree_split_node_result res = tree_split_node(x, it, 0, &q3);
+        struct tree_split_node_result res = tree_split_node(tree, it, 0, &q3);
         v = res.version_id;
         tree_iterator_free(it);
     }
     {
-        struct node_allocator *a = tree_get_allocator(x);
+        struct node_allocator *a = tree_get_allocator(tree);
         allocator_try_unload_node(a, 5);
     }
     {
-        struct tree_iterator *it = tree_iterator_create(x, v);
+        struct tree_iterator *it = tree_iterator_create(tree, v);
         tree_iterator_try_move_down(it, 1);
-        struct tree_set_leaf_result res = tree_set_leaf(x, it, 1, &r3);
+        struct tree_set_leaf_result res = tree_set_leaf(tree, it, 1, &r3);
         v = res.version_id;
         tree_iterator_free(it);
     }
@@ -76,73 +72,55 @@ int main()
     /* dump tree */
     
     /* check workers */
-    printf("Checking workers subsystem");
     {
-        struct worker_pool *p = worker_pool_create(
+        struct worker_pool *worker_pool = worker_pool_create(
             akinator_worker,
             akinator_worker_send,
             NULL
         );
 
-        worker_pool_resize_workers(p, 4);
+        worker_pool_resize_workers(worker_pool, 4);
 
-        struct akinator_user user = {.id = 5};
+        struct akinator_user *user = akinator_worker_connect_user(tree);
         
         while (1)
         {
-            struct akinator_task_data task_data;
-
-            task_data.dont_solved = 0;
-            task_data.user = &user;
-            task_data.iterator = tree_iterator_create(x, x->versions_len - 1);
-            task_data.add_new_name = NULL;
+            struct akinator_task_data *task_data = akinator_worker_start_game(user, tree);
             
-            printf("Starting game...\n");
-            struct worker_task_id task = worker_pool_start_task(p, &task_data);
+            struct worker_task_id task = worker_pool_start_task(worker_pool, task_data);
     
-            while (p->free_id_len != p->tasks_alloc)
+            while (worker_pool->free_id_len != worker_pool->tasks_alloc)
             {
-                char *text = malloc(1000);
-                printf("ANSWER: ");
+                void *event = akinator_worker_prompt();
+                if (worker_pool->free_id_len != worker_pool->tasks_alloc)
                 {
-                    int c, id = 0;
-                    while ((c = getchar()) != '\n')
-                    {
-                        text[id++] = c;
-                    }
-                    text[id++] = 0;
-                }
-                if (p->free_id_len != p->tasks_alloc)
-                {
-                    worker_pool_receive_event(p, task, (void *)text);
+                    worker_pool_receive_event(worker_pool, task, event);
                 }
             }
 
-            if (task_data.add_new_name)
-            {
-                free(task_data.add_new_name);
-            }
+            akinator_worker_finalize_game(task_data, user, tree);
 
-            tree_iterator_free(task_data.iterator);
-    
-            printf("Game ended\n");
+            if (!akinator_worker_restart_game(user, tree))
+            {
+                break;
+            }
         }
 
-        printf("You selected to quit the game\n");
-
-        worker_pool_free(p);
+        worker_pool_free(worker_pool);
+        
+        akinator_worker_disconnect_user(user, tree);
     }
 
-    printf("saving...\n");
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    double total_seconds1 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
-
-    tree_sync_and_free(x);
-
-    gettimeofday(&tv, NULL);
-    double total_seconds2 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
-    printf("saving used %f seconds\n", total_seconds2 - total_seconds1);
+//     printf("saving...\n");
+//     struct timeval tv;
+//     gettimeofday(&tv, NULL);
+//     double total_seconds1 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+// 
+//     tree_sync_and_free(tree);
+// 
+//     gettimeofday(&tv, NULL);
+//     double total_seconds2 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+//     printf("saving used %f seconds\n", total_seconds2 - total_seconds1);
     
     return 0;
 }

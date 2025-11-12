@@ -56,7 +56,6 @@ void akinator_ask_question(struct worker_instance *wk, struct worker_task *tsk)
 
 void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *event)
 {
-    printf("Invoke task %p\n", tsk->data);
     struct akinator_task_data *data = tsk->data;
 
     if (data->add_new_name != NULL)
@@ -238,4 +237,81 @@ void akinator_worker_send(struct worker_task *tsk, void *event, void *send_data)
     (void)send_data;
     printf("AKINATOR: >>> %s\n", (char *)event);
     free(event);
+}
+
+void *akinator_worker_prompt()
+{
+    // printf("ANSWER: ");
+    char *text = malloc(1000);
+    {
+        int c, id = 0;
+        while ((c = getchar()) != '\n')
+        {
+            text[id++] = c;
+        }
+        text[id++] = 0;
+    }
+    return text;
+}
+
+struct akinator_user *akinator_worker_connect_user(struct tree *tree)
+{
+    (void)tree;
+    
+    struct akinator_user *user = malloc(sizeof(*user));
+
+    user->id = rand();
+    printf("User %lld connected\n", user->id);
+    
+    return user;
+}
+
+struct akinator_task_data *akinator_worker_start_game(struct akinator_user *user, struct tree *tree)
+{
+    struct akinator_task_data *task_data = malloc(sizeof(*task_data));
+    
+    task_data->dont_solved = 0;
+    task_data->user = user;
+    task_data->iterator = tree_iterator_create(tree, tree->versions_len - 1);
+    task_data->add_new_name = NULL;
+
+    return task_data;
+}
+
+void akinator_worker_finalize_game(struct akinator_task_data *task_data, struct akinator_user *user, struct tree *tree)
+{
+    (void)user;
+    (void)tree;
+    
+    printf("Game ended.\n");
+    
+    if (task_data->add_new_name)
+    {
+        free(task_data->add_new_name);
+    }
+
+    tree_iterator_free(task_data->iterator);
+
+    free(task_data);
+}
+
+int32_t akinator_worker_restart_game(struct akinator_user *user, struct tree *tree)
+{
+    (void)user;
+    (void)tree;
+    printf("Do you want to restart? [y/n] ");
+    char c;
+    scanf("%c", &c);
+    
+    while (getchar() != '\n') {}
+    
+    return c == 'y' || c == 'Y';
+}
+
+void akinator_worker_disconnect_user(struct akinator_user *user, struct tree *tree)
+{
+    (void)tree;
+    
+    printf("User %lld disconnected\n", user->id);
+    free(user);
 }
