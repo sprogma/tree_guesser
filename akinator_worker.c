@@ -114,7 +114,7 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
     {
         /* update tree */
         char *str = malloc(1000);
-        sprintf(str, "OK. I add this to my database [not really, ahahahahaha!] [string %s]", (char *)event);
+        sprintf(str, "OK. I add this to my database [string %s]", (char *)event);
         worker_pool_send_event(wk, str);
         
         /* add new node */
