@@ -132,6 +132,7 @@ void allocator_release_node(struct node_allocator *allocator, struct node *node,
 void allocator_release_node_by_id(struct node_allocator *allocator, int64_t node_id, int32_t exclusive);
 
 #define NODE_WAS_MODITIFIED 0x179
+#define NODE_IS_USED 0x5757
 #define NODE_ALREADY_UNLOADED 0x998
 #define NODE_WAS_FREED 0x244
 #define NODE_IS_FREE 0x353

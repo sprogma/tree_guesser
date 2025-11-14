@@ -16,6 +16,13 @@
     #define log2 printf
 #endif
 
+#if 1
+    #define LINE
+#else
+    #define LINE printf("%d ...\n", __LINE__);
+#endif
+
+
 
 /* must have at least shared access before this call */
 static void allocator_store_size(struct node_allocator *allocator)
@@ -173,15 +180,15 @@ struct node_allocator *allocator_create(const char *db_filename)
     AcquireSRWLockExclusive(&allocator->lock);
     
     /* start optimization process */
-    // DWORD threadId;
-    // allocator->optimization_thread = CreateThread(
-    //         NULL,
-    //         0,
-    //         unloader_fn,
-    //         allocator,
-    //         CREATE_SUSPENDED,
-    //         &threadId
-    // );
+    DWORD threadId;
+    allocator->optimization_thread = CreateThread(
+            NULL,
+            0,
+            unloader_fn,
+            allocator,
+            CREATE_SUSPENDED,
+            &threadId
+    );
     
     ReleaseSRWLockExclusive(&allocator->lock);
     
@@ -363,16 +370,18 @@ static struct node *allocator_load_node(struct node_allocator *allocator, int64_
 }
 
 
-static void allocator_sync_node(struct node_allocator *allocator, int64_t node_id, int32_t is_allocator_already_shared)
+static int32_t allocator_sync_node(struct node_allocator *allocator, int64_t node_id, int32_t is_allocator_already_shared)
 {
     log("Sync node %lld\n", node_id);
     
     int64_t offset = 8 + node_id * (MAX_NODE_SIZE + 4);
 
+    LINE
     if (!is_allocator_already_shared)
     {
         AcquireSRWLockShared(&allocator->lock);
     }
+    LINE
     
     struct node *node = allocator->nodes[node_id];
 
@@ -396,7 +405,7 @@ static void allocator_sync_node(struct node_allocator *allocator, int64_t node_i
                 {
                     ReleaseSRWLockShared(&allocator->lock);
                 }
-                return;
+                return 0;
             }
             if (written != 4)
             {
@@ -405,7 +414,7 @@ static void allocator_sync_node(struct node_allocator *allocator, int64_t node_i
                 {
                     ReleaseSRWLockShared(&allocator->lock);
                 }
-                return;
+                return 0;
             }
         }
         
@@ -414,7 +423,7 @@ static void allocator_sync_node(struct node_allocator *allocator, int64_t node_i
             ReleaseSRWLockShared(&allocator->lock);
         }
         
-        return;
+        return 1;
     }
     else if (node == UNLOADED_NODE)
     {
@@ -423,20 +432,33 @@ static void allocator_sync_node(struct node_allocator *allocator, int64_t node_i
         {
             ReleaseSRWLockShared(&allocator->lock);
         }
-        return;
+        return 1;
     }
 
-    AcquireSRWLockShared(&node->lock);
+    LINE
+    if (TryAcquireSRWLockShared(&node->lock) == 0)
+    {
+        LINE
+        if (!is_allocator_already_shared)
+        {
+            ReleaseSRWLockShared(&allocator->lock);
+        }
+        LINE
+        return 0;
+    }
+    LINE
     
     /* now we need to store node to file */
     assert(allocator->pagefile != INVALID_HANDLE_VALUE);
 
     HANDLE hFile = allocator->pagefile;
     
+    LINE
     if (!is_allocator_already_shared)
     {
         ReleaseSRWLockShared(&allocator->lock);
     }
+    LINE
 
     /* take node */
 
@@ -455,13 +477,13 @@ static void allocator_sync_node(struct node_allocator *allocator, int64_t node_i
             /* no support of async IO for now */
             fprintf(stderr, "Error: WriteFile returned FALSE\n");
             ReleaseSRWLockShared(&node->lock);
-            return;
+            return 0;
         }
         if (written != 4)
         {
             fprintf(stderr, "Error: WriteFile wrote not all bytes\n");
             ReleaseSRWLockShared(&node->lock);
-            return;
+            return 0;
         }
     }
     
@@ -477,19 +499,23 @@ static void allocator_sync_node(struct node_allocator *allocator, int64_t node_i
             /* no support of async IO for now */
             fprintf(stderr, "Error: WriteFile returned FALSE\n");
             ReleaseSRWLockShared(&node->lock);
-            return;
+            return 0;
         }
         if (written != (DWORD)node_size)
         {
             fprintf(stderr, "Error: WriteFile wrote not all bytes\n");
             ReleaseSRWLockShared(&node->lock);
-            return;
+            return 0;
         }
     }
 
     log("Node written\n");
 
+    LINE
     ReleaseSRWLockShared(&node->lock);
+    LINE
+
+    return 1;
 }
 
 
@@ -513,27 +539,29 @@ int32_t allocator_try_unload_node(struct node_allocator *allocator, int64_t node
             ReleaseSRWLockShared(&allocator->lock);
             return NODE_ALREADY_UNLOADED;
         }
-        
+
+        LINE
         node_copy_size = node_get_size(node);
         node_copy = malloc(node_copy_size);
         memcpy(node_copy, node, node_copy_size);
+        LINE
     }
 
     ReleaseSRWLockShared(&allocator->lock);
     
 
-    allocator_sync_node(allocator, node_id, 0);
+    LINE
+    if (allocator_sync_node(allocator, node_id, 0) == 0)
+    {
+        return NODE_IS_USED;
+    }
+    LINE
     
     
     AcquireSRWLockExclusive(&allocator->lock);
     
     struct node *node = allocator->nodes[node_id];
 
-    if (memcmp(node_copy, node, node_copy_size) != 0)
-    {
-        ReleaseSRWLockExclusive(&allocator->lock);
-        return NODE_WAS_MODITIFIED;
-    }
     
     if (node == NULL)
     {
@@ -544,6 +572,14 @@ int32_t allocator_try_unload_node(struct node_allocator *allocator, int64_t node
     {
         ReleaseSRWLockExclusive(&allocator->lock);
         return NODE_ALREADY_UNLOADED;
+    }
+    
+    LINE
+    
+    if (memcmp(node_copy, node, node_copy_size) != 0)
+    {
+        ReleaseSRWLockExclusive(&allocator->lock);
+        return NODE_WAS_MODITIFIED;
     }
     
     /* simply unload node */
@@ -560,7 +596,7 @@ void allocator_unload_node_force(struct node_allocator *allocator, int64_t node_
 {
     AcquireSRWLockExclusive(&allocator->lock);
     
-    allocator_sync_node(allocator, node_id, 1);
+    while (allocator_sync_node(allocator, node_id, 1) == 0) {}
     
     struct node *node = allocator->nodes[node_id];
    
@@ -607,12 +643,20 @@ void allocator_sync_and_free(struct node_allocator *allocator)
        there was no new allocations in parallel with this sync) */
     AcquireSRWLockExclusive(&allocator->lock);
 
+    if (allocator->optimization_thread != INVALID_HANDLE_VALUE)
+    {
+        TerminateThread(allocator->optimization_thread, 1);
+    }
+
     allocator_store_size(allocator);
 
     int node_id = 0;
     for (int i = 0; i < allocator->nodes_alloc; ++i)
     {
-        allocator_sync_node(allocator, node_id, 1);
+        if (allocator_sync_node(allocator, node_id, 1) == 0)
+        {
+            fprintf(stderr, "Error: can't sync node at sync_and_free call. Probably some threads which work with tree aren't stopped\n");
+        }
         node_id = node_id + 179;
         node_id %= allocator->nodes_alloc;
     }
@@ -653,7 +697,9 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
 {
     struct node *result_node;
     
+    LINE
     AcquireSRWLockShared(&allocator->lock);
+    LINE
     /* allocate new node */
     for (int i = 0; i < allocator->nodes_alloc; ++i)
     {
@@ -662,7 +708,9 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
             /* try to insert node */
             /* change access on exclusive */
             ReleaseSRWLockShared(&allocator->lock);
+            LINE
             AcquireSRWLockExclusive(&allocator->lock);
+            LINE
             
             /* node could be allocated while changing access,
                so check that it is still free */
@@ -679,13 +727,17 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
             
             /* else - continue searching */
             ReleaseSRWLockExclusive(&allocator->lock);
+            LINE
             AcquireSRWLockShared(&allocator->lock);
+            LINE
         }
     }
     ReleaseSRWLockShared(&allocator->lock);
     /* here - almost all table was used (may be not all)
        so reallocate node array */
+    LINE
     AcquireSRWLockExclusive(&allocator->lock);
+    LINE
     
     /* realloc */
     int64_t old_size = allocator->nodes_alloc;
@@ -707,7 +759,9 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
     /* now, state is exclusive, so use it to insert new node */
     int64_t result_node_id = old_size;
     
+    LINE
     allocator_initializate_node(allocator, result_node_id, type);
+    LINE
     
     if (allocator->nodes[result_node_id] == NULL)
     {
