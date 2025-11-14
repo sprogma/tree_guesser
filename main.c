@@ -111,16 +111,16 @@ int main()
         akinator_worker_disconnect_user(user, tree);
     }
 
-//     printf("saving...\n");
-//     struct timeval tv;
-//     gettimeofday(&tv, NULL);
-//     double total_seconds1 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
-// 
-//     tree_sync_and_free(tree);
-// 
-//     gettimeofday(&tv, NULL);
-//     double total_seconds2 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
-//     printf("saving used %f seconds\n", total_seconds2 - total_seconds1);
+    printf("saving...\n");
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    double total_seconds1 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+
+    tree_sync_and_free(tree);
+
+    gettimeofday(&tv, NULL);
+    double total_seconds2 = (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+    printf("saving used %f seconds\n", total_seconds2 - total_seconds1);
     
     return 0;
 }

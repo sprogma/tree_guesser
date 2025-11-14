@@ -90,6 +90,7 @@ int32_t tree_iterator_try_move_down(struct tree_iterator *iterator, int32_t move
         
         if (next_node_id == INVALID_NODE_ID)
         {
+            allocator_release_node(allocator, node, 0);
             return 1;
         }
         

@@ -566,6 +566,7 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
     
     /* if node was unloaded */
     struct node *res = allocator->nodes[node_id];
+    log("NODE %lld [%p] ACQUIRED\n", node_id, res);
     if (res == NULL)
     {
         /* not allocated node */
@@ -587,6 +588,7 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
         /* check - is node loaded or freed? 
            (if node was freed before loading) */
         assert(res != UNLOADED_NODE);
+        log("[after load it is %p]\n", res);
         if (res == NULL)
         {
             return NULL;
@@ -617,6 +619,7 @@ struct node *allocator_acquire_node(struct node_allocator *allocator, int64_t no
 
 void allocator_release_node_by_id(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
 {
+    log("NODE %lld RELEASED BY ID\n", node_id);
     assert(node_id != INVALID_NODE_ID);
     
     AcquireSRWLockShared(&allocator->lock);
@@ -629,6 +632,7 @@ void allocator_release_node_by_id(struct node_allocator *allocator, int64_t node
 
 void allocator_release_node(struct node_allocator *allocator, struct node *node, int32_t exclusive)
 {
+    log("NODE %p RELEASED\n", node);
     (void)allocator;
     
     /* release node */

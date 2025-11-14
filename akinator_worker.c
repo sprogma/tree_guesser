@@ -7,6 +7,9 @@
 #include "stdlib.h"
 
 
+#define lock_log(...)
+
+
 void akinator_ask_question(struct worker_instance *wk, struct worker_task *tsk)
 {
     struct akinator_task_data *data = tsk->data;
@@ -148,12 +151,11 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
                 }
                 else
                 {
+                    allocator_release_node(allocator, node, 0);
                     struct record *record = malloc(sizeof(*record));
                     record->name = strdup(event);
                     tree_set_leaf(data->iterator->tree, data->iterator, data->set_as_leaf, record);
                 }
-                
-                allocator_release_node(allocator, node, 0);
             }
         }
         
@@ -172,7 +174,8 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
         fprintf(stderr, "Internal akinator_worker error\n");
         worker_pool_exit(wk);
     }
-    
+
+    lock_log("UPDATE USING ANSWER\n");
     struct node_allocator *allocator = tree_get_allocator(data->iterator->tree);
     struct node *node = allocator_acquire_node(allocator, node_id, 0);
 
@@ -241,7 +244,7 @@ void akinator_worker_send(struct worker_task *tsk, void *event, void *send_data)
 
 void *akinator_worker_prompt()
 {
-    // printf("ANSWER: ");
+    // lock_log("ANSWER: ");
     char *text = malloc(1000);
     {
         int c, id = 0;
