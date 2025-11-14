@@ -69,7 +69,7 @@ struct worker_pool
 struct worker_pool *worker_pool_create(
     void (*worker_process)(struct worker_instance *worker, struct worker_task *task, void *event),
     void (*worker_send_event)(struct worker_task *task, void *event, void *send_data),
-    void *send_data;
+    void *send_data
 );
 
 void worker_pool_free(struct worker_pool *pool);

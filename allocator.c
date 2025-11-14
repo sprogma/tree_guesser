@@ -10,17 +10,140 @@
     #define log printf
 #endif
 
+
+/* must have at least shared access before this call */
+static void allocator_store_size(struct node_allocator *allocator)
+{
+    log("store %lld nodes\n", allocator->nodes_alloc);
+    DWORD written = 0;
+    OVERLAPPED ov = {0};
+    ov.Offset = (DWORD)(0LL & 0xFFFFFFFF);
+    ov.OffsetHigh = (DWORD)(0LL >> 32);
+    BOOL ok = WriteFile(allocator->pagefile, &allocator->nodes_alloc, 8, &written, &ov);
+    if (!ok) 
+    {
+        /* no support of async IO for now */
+        fprintf(stderr, "Error: WriteFile returned FALSE\n");
+        return;
+    }
+    if (written != 8)
+    {
+        fprintf(stderr, "Error: WriteFile wrote not all bytes\n");
+        return;
+    }    
+}
+
+
 struct node_allocator *allocator_create(const char *db_filename)
 {
     struct node_allocator *allocator = calloc(1, sizeof(*allocator));
     
-    allocator->nodes_alloc = 1024;
-    allocator->nodes = calloc(1, sizeof(*allocator->nodes) * allocator->nodes_alloc);
     allocator->lock = (SRWLOCK)SRWLOCK_INIT;
-    allocator->loaded_nodes = 0;
-    allocator->pagefile = INVALID_HANDLE_VALUE;
 
     if (db_filename != NULL)
+    {
+        log("file %s\n", db_filename);
+        allocator->pagefile = CreateFile(
+            db_filename,
+            GENERIC_READ | GENERIC_WRITE,
+            0,
+            NULL,
+            OPEN_ALWAYS,
+            FILE_ATTRIBUTE_NORMAL,
+            // FILE_ATTRIBUTE_NORMAL | FILE_FLAG_WRITE_THROUGH,
+            NULL
+        );
+        log("Open file! %ld\n", GetLastError());
+        assert(allocator->pagefile != INVALID_HANDLE_VALUE);
+
+        /* try to read node count from file */
+        allocator->nodes_alloc = 0;
+        
+        DWORD read = 0;
+        OVERLAPPED ov = {0};
+        ov.Offset = (DWORD)(0LL & 0xFFFFFFFF);
+        ov.OffsetHigh = (DWORD)(0LL >> 32);
+        BOOL ok = ReadFile(allocator->pagefile, &allocator->nodes_alloc, 8, &read, &ov);
+        if (!ok) 
+        {
+            fprintf(stderr, "Error: ReadFile returned FALSE\n");
+            return NULL;
+        }
+        if (read != 8)
+        {
+            fprintf(stderr, "Error: ReadFile read not all bytes\n");
+            return NULL;
+        }
+
+        
+        allocator->nodes = calloc(1, sizeof(*allocator->nodes) * allocator->nodes_alloc);
+        allocator->loaded_nodes = 0;
+
+        if (allocator->nodes_alloc == 0)
+        {
+            fprintf(stderr, "Error: loading database from 0 nodes\n");
+            return NULL;
+        }
+
+        /* set nodes as unloaded */
+        for (int i = 0; i < allocator->nodes_alloc; ++i)
+        {
+            /* check is it free */
+            {
+                int node_size = 0;
+                int64_t offset = 8 + i * (MAX_NODE_SIZE + 4);
+                DWORD read = 0;
+                OVERLAPPED ov = {0};
+                ov.Offset = (DWORD)(offset & 0xFFFFFFFF);
+                ov.OffsetHigh = (DWORD)(offset >> 32);
+                BOOL ok = ReadFile(allocator->pagefile, &node_size, 4, &read, &ov);
+                if (!ok) 
+                {
+                    fprintf(stderr, "Error: ReadFile returned FALSE\n");
+                    return NULL;
+                }
+                if (read != 4)
+                {
+                    fprintf(stderr, "Error: ReadFile read not all bytes\n");
+                    return NULL;
+                }
+
+                if (node_size == 0)
+                {
+                    allocator->nodes[i] = NULL;
+                }
+                else
+                {
+                    allocator->nodes[i] = UNLOADED_NODE;
+                }
+            }
+        }
+    }
+    else
+    {
+        allocator->nodes_alloc = 1024;
+        allocator->nodes = calloc(1, sizeof(*allocator->nodes) * allocator->nodes_alloc);
+        allocator->loaded_nodes = 0;
+        allocator->pagefile = INVALID_HANDLE_VALUE;
+    }
+
+    allocator_store_size(allocator);
+    
+    AcquireSRWLockExclusive(&allocator->lock);
+    
+    /* start optimization process */
+    // TODO:
+    
+    ReleaseSRWLockExclusive(&allocator->lock);
+    
+    return allocator;
+}
+
+
+void allocator_enable_pagefile(struct node_allocator *allocator, const char *db_filename)
+{
+    AcquireSRWLockExclusive(&allocator->lock);
+    if (allocator->pagefile == INVALID_HANDLE_VALUE)
     {
         log("file %s\n", db_filename);
         allocator->pagefile = CreateFile(
@@ -36,17 +159,8 @@ struct node_allocator *allocator_create(const char *db_filename)
         log("Open file! %ld\n", GetLastError());
         assert(allocator->pagefile != INVALID_HANDLE_VALUE);
     }
-    
-    AcquireSRWLockExclusive(&allocator->lock);
-    
-    /* start optimization process */
-    // TODO:
-    
     ReleaseSRWLockExclusive(&allocator->lock);
-    
-    return allocator;
 }
-
 
 
 static struct node *allocator_load_node(struct node_allocator *allocator, int64_t node_id, int32_t exclusive)
@@ -79,7 +193,7 @@ static struct node *allocator_load_node(struct node_allocator *allocator, int64_
 
     /* now we need to store node to file */
 
-    int64_t offset = node_id * (MAX_NODE_SIZE + 4);
+    int64_t offset = 8 + node_id * (MAX_NODE_SIZE + 4);
     int32_t node_size = -1;
     
     log("Reading from file at %lld count 4\n", offset);
@@ -199,7 +313,7 @@ static void allocator_sync_node(struct node_allocator *allocator, int64_t node_i
 {
     log("Sync node %lld\n", node_id);
     
-    int64_t offset = node_id * (MAX_NODE_SIZE + 4);
+    int64_t offset = 8 + node_id * (MAX_NODE_SIZE + 4);
 
     if (!is_allocator_already_shared)
     {
@@ -419,15 +533,11 @@ void allocator_unload_node_force(struct node_allocator *allocator, int64_t node_
 /* at this call, allocator must have exclusive access locked */
 static void allocator_free_memory(struct node_allocator *allocator)
 {
-    for (int i = 0; i < allocator->nodes_len; ++i)
+    for (int i = 0; i < allocator->nodes_alloc; ++i)
     {
         if (allocator->nodes[i] == UNLOADED_NODE)
         {
-            assert(allocator->pagefile != INVALID_HANDLE_VALUE);
-            
-            fprintf(stderr, "Not implemented: unloading nodes\n");
-            *(int *)NULL = 1;
-            // TODO:
+            // Nothing to do
         }
         else
         {
@@ -443,6 +553,8 @@ void allocator_sync_and_free(struct node_allocator *allocator)
     /* one global sync, to assert that all nodes was synced, (for example
        there was no new allocations in parallel with this sync) */
     AcquireSRWLockExclusive(&allocator->lock);
+
+    allocator_store_size(allocator);
 
     int node_id = 0;
     for (int i = 0; i < allocator->nodes_alloc; ++i)
@@ -463,6 +575,7 @@ void allocator_free(struct node_allocator *allocator)
     /* stop all other processes? */
     // TODO:
     
+    allocator_store_size(allocator);
     
     /* free allocator */
     allocator_free_memory(allocator);
@@ -532,6 +645,8 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
         ReleaseSRWLockExclusive(&allocator->lock);
         return (struct allocator_create_node_result){INVALID_NODE_ID, NULL};
     }
+
+    allocator->nodes = new_ptr;
     
     /* set all new nodes as not allocated */
     memset(allocator->nodes + old_size, 0, sizeof(*allocator->nodes) * (allocator->nodes_alloc - old_size));
@@ -551,6 +666,7 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
         result_node = allocator->nodes[result_node_id];
     }
     
+    allocator_store_size(allocator);
     
     ReleaseSRWLockExclusive(&allocator->lock);
     

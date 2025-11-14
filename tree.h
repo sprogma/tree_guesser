@@ -11,13 +11,13 @@
 
 struct question
 {
-    char *text;
+    char text[512];
 };
 
 
 struct record
 {
-    char *name;
+    char name[128];
 };
 
 
@@ -43,14 +43,14 @@ struct node_variant
 {
     struct node;
     int64_t l, r;
-    struct question *question;
+    struct question question;
 };
 
 
 struct node_leaf
 {
     struct node;
-    struct record *record;    
+    struct record record;    
 };
 
 #define MAX_NODE_SIZE ((int64_t)(sizeof(struct node_leaf) > sizeof(struct node_variant) ? sizeof(struct node_leaf) : sizeof(struct node_variant)))
@@ -92,7 +92,6 @@ struct akinator
 struct node_allocator
 {
     struct node **nodes;
-    int64_t nodes_len;
     int64_t nodes_alloc;
     
     int64_t loaded_nodes;
@@ -119,6 +118,7 @@ struct tree_iterator
 
 
 struct node_allocator *allocator_create(const char *db_filename);
+void allocator_enable_pagefile(struct node_allocator *allocator, const char *db_filename);
 void allocator_sync_and_free(struct node_allocator *allocator);
 void allocator_free(struct node_allocator *allocator);
 
@@ -149,7 +149,7 @@ struct allocator_create_node_result allocator_create_node(struct node_allocator 
 
 /* this is inner function, don't use it directly */
 /* result node will be locked with exclusive access */
-struct node *node_create();
+struct node *node_create(enum node_type type);
 
 
 /* this is inner function, don't use it directly */
@@ -163,8 +163,9 @@ int32_t node_is_isomorphic(struct node *node_a, struct node *node_b);
 int64_t node_get_size(struct node *node);
 
 
-struct tree *tree_create();
-void tree_sync_and_free(struct tree *tree);
+struct tree *tree_create(const char *db_filename, const char *metafile);
+void tree_enable_pagefile(struct tree *tree, const char *db_filename);
+void tree_sync_and_free(struct tree *tree, int64_t saving_version, const char *metadata_file);
 void tree_free(struct tree *tree);
 
 
@@ -202,7 +203,7 @@ struct tree_split_node_result {
     int64_t version_id;
     int64_t new_node_id;
 };
-struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_iterator *iterator, int32_t node_is_now_left, struct question *question);
+struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_iterator *iterator, int32_t node_is_now_left, char *question);
 
 
 
@@ -211,7 +212,7 @@ struct tree_set_leaf_result {
     int64_t version_id;
     int64_t new_node_id;
 };
-struct tree_set_leaf_result tree_set_leaf(struct tree *tree, struct tree_iterator *iterator, int32_t set_as_left_child, struct record *record);
+struct tree_set_leaf_result tree_set_leaf(struct tree *tree, struct tree_iterator *iterator, int32_t set_as_left_child, char *record);
 
 
 

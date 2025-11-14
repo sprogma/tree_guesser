@@ -64,7 +64,7 @@ static struct tree_allocate_version_result tree_allocate_version(struct tree *tr
 }
 
 
-struct tree *tree_create()
+struct tree *tree_create(const char *db_filename, const char *metafile)
 {
     struct tree *tree = calloc(1, sizeof(*tree));
 
@@ -75,25 +75,59 @@ struct tree *tree_create()
     tree->lock = (SRWLOCK)SRWLOCK_INIT;
 
     /* create allocator */
-    tree->allocator = allocator_create("./akinator.db");
+    tree->allocator = allocator_create(db_filename);
 
-    /* initializate root version */
-    struct tree_allocate_version_result result = tree_allocate_version(tree, 0);
-    assert(result.version_id == 0);
-    assert(result.version != NULL);
+    if (metafile != NULL)
+    {
+        int64_t root, size;
+        FILE *f = fopen(metafile, "r");
+        fscanf(f, "root: %lld\n", &root);
+        fscanf(f, "size: %lld", &size);
+        fclose(f);
+        
+        /* initializate root version */
+        struct tree_allocate_version_result result = tree_allocate_version(tree, 0);
+        assert(result.version_id == 0);
+        assert(result.version != NULL);
 
-    /* release root version */
-    ReleaseSRWLockExclusive(&result.version->lock);
+        result.version->root = root;
+        result.version->size = size;
+        
+        /* release root version */
+        ReleaseSRWLockExclusive(&result.version->lock);
+    }
+    else
+    {
+        /* initializate root version */
+        struct tree_allocate_version_result result = tree_allocate_version(tree, 0);
+        assert(result.version_id == 0);
+        assert(result.version != NULL);
+        
+        /* release root version */
+        ReleaseSRWLockExclusive(&result.version->lock);
+    }
+
     
     return tree;
 }
 
-void tree_sync_and_free(struct tree *tree)
+void tree_enable_pagefile(struct tree *tree, const char *db_filename)
+{
+    allocator_enable_pagefile(tree->allocator, db_filename);
+}
+
+void tree_sync_and_free(struct tree *tree, int64_t saving_version, const char *metadata_file)
 {
     AcquireSRWLockExclusive(&tree->lock);
     
     /* free all nodes? */
     allocator_sync_and_free(tree->allocator);
+
+    /* save current version's root and metadata */
+    FILE *f = fopen(metadata_file, "w");
+    fprintf(f, "root: %lld\n", tree->versions[saving_version]->root);
+    fprintf(f, "size: %lld\n", tree->versions[saving_version]->size);
+    fclose(f);
     
     /* free tree */
     free(tree);
@@ -244,7 +278,7 @@ static int32_t tree_copy_and_set_new_root(struct tree *tree,
     return 0; 
 }
 
-struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_iterator *iterator, int32_t node_is_now_left, struct question *question)
+struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_iterator *iterator, int32_t node_is_now_left, char *question)
 {
     /* copy tree state */
     AcquireSRWLockExclusive(&tree->lock);
@@ -269,7 +303,7 @@ struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_ite
     int64_t node_id = tree_iterator_get_node(iterator, 0);
 
     /* fill node by given data */
-    ((struct node_variant *)new_node.node)->question = question;
+    strcpy(((struct node_variant *)new_node.node)->question.text, question);
     if (node_is_now_left)
     {
         ((struct node_variant *)new_node.node)->l = node_id;
@@ -294,7 +328,7 @@ struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_ite
 }
 
 
-struct tree_set_leaf_result tree_set_leaf(struct tree *tree, struct tree_iterator *iterator, int32_t set_as_left_child, struct record *record)
+struct tree_set_leaf_result tree_set_leaf(struct tree *tree, struct tree_iterator *iterator, int32_t set_as_left_child, char *record)
 {
     /* copy tree state */
     AcquireSRWLockExclusive(&tree->lock);
@@ -317,7 +351,7 @@ struct tree_set_leaf_result tree_set_leaf(struct tree *tree, struct tree_iterato
     }
 
     /* fill node by given data */
-    ((struct node_leaf *)new_node.node)->record = record;
+    strcpy(((struct node_leaf *)new_node.node)->record.name, record);
 
     /* release created node */
     ReleaseSRWLockExclusive(&new_node.node->lock);

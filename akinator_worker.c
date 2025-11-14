@@ -39,7 +39,7 @@ void akinator_ask_question(struct worker_instance *wk, struct worker_task *tsk)
         struct node_leaf *leaf = (struct node_leaf *)node;
         
         char *str = malloc(1000);
-        sprintf(str, "I think i know that is it! it is %s?", leaf->record->name);
+        sprintf(str, "I think i know that is it! it is %s?", leaf->record.name);
         worker_pool_send_event(wk, str);
         allocator_release_node(allocator, node, 0);
         worker_pool_wait_event(wk);
@@ -49,7 +49,7 @@ void akinator_ask_question(struct worker_instance *wk, struct worker_task *tsk)
         struct node_variant *variant = (struct node_variant *)node;
 
         char *str = malloc(1000);
-        sprintf(str, "my next question: %s", variant->question->text);
+        sprintf(str, "my next question: %s", variant->question.text);
         worker_pool_send_event(wk, str);
         allocator_release_node(allocator, node, 0);
         worker_pool_wait_event(wk);
@@ -63,13 +63,22 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
 
     if (data->add_new_name != NULL)
     {
+
+        if (strlen(event) + 1 > sizeof(((struct question *)NULL)->text))
+        {
+            char *str = malloc(1000);
+            sprintf(str, "TL;DR; [too many letters]. write another variant");
+            worker_pool_send_event(wk, str);
+            
+            free(event);
+            worker_pool_wait_event(wk);
+        }
+        
         char *str = malloc(1000);
         sprintf(str, "Yes, now i know it.");
         worker_pool_send_event(wk, str);
-
-        struct question *question = malloc(sizeof(*question));
-        question->text = strdup(event);
-        struct tree_split_node_result res = tree_split_node(data->iterator->tree, data->iterator, 1, question);
+        
+        struct tree_split_node_result res = tree_split_node(data->iterator->tree, data->iterator, 1, event);
 
         /* and add new record */
 
@@ -94,9 +103,7 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
 
         assert(tree_iterator_get_node(it, 0) == res.new_node_id);
         
-        struct record *record = malloc(sizeof(*record));
-        record->name = data->add_new_name;
-        tree_set_leaf(it->tree, it, 0, record);
+        tree_set_leaf(it->tree, it, 0, event);
         
         data->add_new_name = NULL;
 
@@ -115,6 +122,16 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
     }
     else if (data->dont_solved)
     {
+        if (strlen(event) + 1 > sizeof(((struct question *)NULL)->text))
+        {
+            char *str = malloc(1000);
+            sprintf(str, "No, too many letters, I can't remember this name. Write it in another variant");
+            worker_pool_send_event(wk, str);
+            
+            free(event);
+            worker_pool_wait_event(wk);
+        }
+        
         /* update tree */
         char *str = malloc(1000);
         sprintf(str, "OK. I add this to my database [string %s]", (char *)event);
@@ -127,9 +144,7 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
             if (node_id == INVALID_NODE_ID)
             {
                 /* this is empty tree - add new character */
-                struct record *record = malloc(sizeof(*record));
-                record->name = strdup(event);
-                tree_set_leaf(data->iterator->tree, data->iterator, 0, record);
+                tree_set_leaf(data->iterator->tree, data->iterator, 0, event);
             }
             else
             {
@@ -143,18 +158,17 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
                     data->add_new_name = strdup(event);
                     
                     char *str = malloc(1000);
-                    sprintf(str, "Ok. Your %s is not %s becouse %s ..?\n", data->add_new_name, ((struct node_leaf *)node)->record->name, data->add_new_name);
+                    sprintf(str, "Ok. Your %s is not %s becouse %s ..?\n", data->add_new_name, ((struct node_leaf *)node)->record.name, data->add_new_name);
                     worker_pool_send_event(wk, str);
                     
                     allocator_release_node(allocator, node, 0);
+                    free(event);
                     worker_pool_wait_event(wk);
                 }
                 else
                 {
                     allocator_release_node(allocator, node, 0);
-                    struct record *record = malloc(sizeof(*record));
-                    record->name = strdup(event);
-                    tree_set_leaf(data->iterator->tree, data->iterator, data->set_as_leaf, record);
+                    tree_set_leaf(data->iterator->tree, data->iterator, data->set_as_leaf, event);
                 }
             }
         }

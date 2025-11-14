@@ -18,7 +18,7 @@ struct node *node_create(enum node_type type)
 
             node->l = INVALID_NODE_ID;
             node->r = INVALID_NODE_ID;
-            node->question = NULL;
+            node->question.text[0] = 0;
 
             AcquireSRWLockExclusive(&node->lock);
 
@@ -34,7 +34,7 @@ struct node *node_create(enum node_type type)
             node->last_access = 0;
             node->lock = (SRWLOCK)SRWLOCK_INIT;
 
-            node->record = NULL;
+            node->record.name[0] = 0;
             
             AcquireSRWLockExclusive(&node->lock);
             
@@ -91,14 +91,14 @@ int32_t node_is_isomorphic(struct node *node_a, struct node *node_b)
             struct node_variant *node_a_var = (struct node_variant *)node_a;
             struct node_variant *node_b_var = (struct node_variant *)node_b;
 
-            return node_a_var->question == node_b_var->question;
+            return strcmp(node_a_var->question.text, node_b_var->question.text) == 0;
         }
         case NODE_LEAF:
         {
             struct node_leaf *node_a_leaf = (struct node_leaf *)node_a;
             struct node_leaf *node_b_leaf = (struct node_leaf *)node_b;
             
-            return node_a_leaf->record == node_b_leaf->record;
+            return strcmp(node_a_leaf->record.name, node_b_leaf->record.name) == 0;
         }
         default:
             return 0;
