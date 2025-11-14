@@ -105,6 +105,7 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
         
         tree_set_leaf(it->tree, it, 0, event);
         
+        free(data->add_new_name);
         data->add_new_name = NULL;
 
         tree_iterator_free(it);
@@ -155,14 +156,13 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
                 {
                     /* need to split node */
                     /* ask for new question */
-                    data->add_new_name = strdup(event);
+                    data->add_new_name = event;
                     
                     char *str = malloc(1000);
                     sprintf(str, "Ok. Your %s is not %s becouse %s ..?\n", data->add_new_name, ((struct node_leaf *)node)->record.name, data->add_new_name);
                     worker_pool_send_event(wk, str);
                     
                     allocator_release_node(allocator, node, 0);
-                    free(event);
                     worker_pool_wait_event(wk);
                 }
                 else
