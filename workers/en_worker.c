@@ -78,10 +78,12 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
         sprintf(str, "Yes, now i know it.");
         worker_pool_send_event(wk, str);
         
+        printf("[XX]\n");
         struct tree_split_node_result res = tree_split_node(data->iterator->tree, data->iterator, 1, event);
 
         /* and add new record */
 
+        printf("[YY]\n");
         struct tree_iterator *it = tree_iterator_create(data->iterator->tree, res.version_id);
         for (int i = 0; i + 1 < data->iterator->path_len; ++i)
         {
@@ -101,16 +103,21 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
             allocator_release_node(allocator, (struct node *)x, 0);
         }
 
+        printf("[assert]\n");
         assert(tree_iterator_get_node(it, 0) == res.new_node_id);
         
+        printf("[ZZ]\n");
         tree_set_leaf(it->tree, it, 0, event);
         
+        printf("[KK]\n");
         free(data->add_new_name);
         data->add_new_name = NULL;
 
         tree_iterator_free(it);
+
         
         free(event);
+        printf("[call exit]\n");
         worker_pool_exit(wk);
     }
     else if (event == NULL)
@@ -156,13 +163,14 @@ void akinator_worker(struct worker_instance *wk, struct worker_task *tsk, void *
                 {
                     /* need to split node */
                     /* ask for new question */
-                    data->add_new_name = event;
+                    data->add_new_name = strdup(event);
                     
                     char *str = malloc(1000);
                     sprintf(str, "Ok. Your %s is not %s becouse %s ..?\n", data->add_new_name, ((struct node_leaf *)node)->record.name, data->add_new_name);
                     worker_pool_send_event(wk, str);
                     
                     allocator_release_node(allocator, node, 0);
+                    free(event);
                     worker_pool_wait_event(wk);
                 }
                 else

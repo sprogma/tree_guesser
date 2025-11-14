@@ -5,6 +5,8 @@
 #include "tree.h"
 
 
+#define log2(...)
+
 
 /* need exclusive rights on tree before call */
 struct tree_allocate_version_result
@@ -209,15 +211,16 @@ static int32_t tree_copy_and_set_new_root(struct tree *tree,
 {    
     (void)new_version_id;
 
+    log2("go up!\n");
     for (int64_t depth = iterator->path_len - 1; depth > 0; --depth)
     {
         int64_t current_id = iterator->path[depth];
-        // printf("we have copy of %lld\n", current_id);
+        // log2("we have copy of %lld\n", current_id);
 
         /* get it's parent */
         int64_t parent_id = iterator->path[depth - 1];
         
-        // printf("we need to create copy of %lld\n", parent_id);
+        // log2("we need to create copy of %lld\n", parent_id);
         
         assert(current_id != INVALID_NODE_ID);
         assert(parent_id != INVALID_NODE_ID);
@@ -225,22 +228,30 @@ static int32_t tree_copy_and_set_new_root(struct tree *tree,
         /* create copy of this parent */
         struct allocator_create_node_result parent_copy;
         {
+            log2("Acquiring node %lld!\n", parent_id);
             struct node *parent = allocator_acquire_node(tree->allocator, parent_id, 0);
+            log2("acquired\n");
             if (parent == NULL)
             {
+                log2("ret -1\n");
+                ReleaseSRWLockExclusive(&new_node->lock);
                 return -1;
             }
 
             /* create copy of this node */
+            log2("creating node...\n");
             parent_copy = allocator_create_node(tree->allocator, NODE_VARIANT);
+            log2("created\n");
             node_make_copy(parent_copy.node, parent);
+            log2("+copied\n");
 
             allocator_release_node(tree->allocator, parent, 0);
+            log2("release node %lld\n", parent_id);
         }
 
         /* redirect it's child on new node */
-        // printf("created copy: %lld node!\n", parent_copy.node_id);
-        // printf("set one of it's child on %lld node!\n", new_node_id);
+        // log2("created copy: %lld node!\n", parent_copy.node_id);
+        // log2("set one of it's child on %lld node!\n", new_node_id);
 
         /* set new_node_to_insert as it's child */
         {
@@ -260,6 +271,7 @@ static int32_t tree_copy_and_set_new_root(struct tree *tree,
         
         /* release current node */
         ReleaseSRWLockExclusive(&new_node->lock);
+        log2("release new node\n");
         
         /* process to next node */
         new_node_id = parent_copy.node_id;
@@ -274,6 +286,7 @@ static int32_t tree_copy_and_set_new_root(struct tree *tree,
 
     /* 2. release new_node_to_insert node */
     ReleaseSRWLockExclusive(&new_node->lock);
+    log2("release last node\n");
 
     return 0; 
 }
@@ -281,9 +294,11 @@ static int32_t tree_copy_and_set_new_root(struct tree *tree,
 struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_iterator *iterator, int32_t node_is_now_left, char *question)
 {
     /* copy tree state */
+    log2("locking tree\n");
     AcquireSRWLockExclusive(&tree->lock);
     struct tree_allocate_version_result new_version = tree_allocate_version(tree, iterator->version_id);
     ReleaseSRWLockExclusive(&tree->lock);
+    log2("unlocked\n");
 
     if (new_version.version_id == -1 || new_version.version == NULL)
     {
@@ -292,7 +307,9 @@ struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_ite
 
     /* result version have exclusive access */
     /* create new node in tree: */
+    log2("creating node...\n");
     struct allocator_create_node_result new_node = allocator_create_node(tree->allocator, NODE_VARIANT);
+    log2("created\n");
 
     if (new_node.node == NULL || new_node.node_id == INVALID_NODE_ID)
     {
@@ -315,11 +332,13 @@ struct tree_split_node_result tree_split_node(struct tree *tree, struct tree_ite
         ((struct node_variant *)new_node.node)->r = node_id;
     }
 
+    log2("tree copy and set new root?\n");
     if (tree_copy_and_set_new_root(tree, new_version.version_id, new_version.version, iterator, new_node.node_id, new_node.node) != 0)
     {
         ReleaseSRWLockExclusive(&new_version.version->lock);
         return (struct tree_split_node_result){-1, INVALID_NODE_ID};
     }
+    log2("set!\n");
     
     ReleaseSRWLockExclusive(&new_version.version->lock);
     

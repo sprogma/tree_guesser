@@ -97,6 +97,7 @@ struct node_allocator
     int64_t loaded_nodes;
 
     HANDLE pagefile;
+    HANDLE optimization_thread;
 
     _Atomic int64_t access_token;
 
